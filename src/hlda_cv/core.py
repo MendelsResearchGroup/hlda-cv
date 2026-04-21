@@ -1,49 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+from typing import TypeAlias
 
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
 
-ArrayLike = Sequence[Sequence[float]] | np.ndarray
+DescriptorMatrix: TypeAlias = list[list[float]] | np.ndarray
 
 
-@dataclass(frozen=True)
-class HLDAResult:
-    weights: pd.Series
-    eigenvalue: float
-    kept_descriptors: list[str]
-    kept_indices: list[int]
-    full_weights: dict[str, float] | None = None
-
-
-def _as_2d_array(values: ArrayLike, name: str) -> np.ndarray:
-    array = np.asarray(values, dtype=float)
-    if array.ndim != 2:
-        raise ValueError(f"{name} must be a 2D array-like object")
-    if array.shape[0] < 2:
-        raise ValueError(f"{name} must contain at least two samples")
-    return array
-
-
-def _validate_descriptor_names(desc_cols: Sequence[str], n_features: int) -> list[str]:
+def _validate_descriptor_names(desc_cols: list[str], n_features: int) -> list[str]:
     names = list(desc_cols)
     if len(names) != n_features:
         raise ValueError(
             f"descriptor name count ({len(names)}) does not match feature count ({n_features})"
         )
     return names
-
-
-def _covariance(X: np.ndarray) -> np.ndarray:
-    cov = np.cov(X, rowvar=False, ddof=1)
-    cov = np.asarray(cov, dtype=float)
-    if cov.ndim == 0:
-        cov = cov.reshape(1, 1)
-    return cov
 
 
 def _regularize_covariance(cov: np.ndarray, ridge: float) -> np.ndarray:
@@ -65,17 +38,17 @@ def _spearman_abs_corr(X: np.ndarray) -> np.ndarray:
 
 
 def prune(
-    X_A: ArrayLike,
-    X_B: ArrayLike,
-    desc_cols: Sequence[str],
+    X_A: DescriptorMatrix,
+    X_B: DescriptorMatrix,
+    desc_cols: list[str],
     threshold: float,
 ) -> tuple[list[str], list[int]]:
     """
     Drop highly correlated descriptors using Spearman rank correlation computed
     separately on each state and merged by union of drops.
     """
-    XA = _as_2d_array(X_A, "X_A")
-    XB = _as_2d_array(X_B, "X_B")
+    XA = np.asarray(X_A, dtype=float)
+    XB = np.asarray(X_B, dtype=float)
     names = _validate_descriptor_names(desc_cols, XA.shape[1])
     if XB.shape[1] != XA.shape[1]:
         raise ValueError("X_A and X_B must have the same number of features")
@@ -93,11 +66,11 @@ def prune(
 
 
 def hlda_from_moments(
-    muA: Sequence[float] | np.ndarray,
-    SA: ArrayLike,
-    muB: Sequence[float] | np.ndarray,
-    SB: ArrayLike,
-    desc_cols: Sequence[str],
+    muA: list[float] | np.ndarray,
+    SA: np.ndarray,
+    muB: list[float] | np.ndarray,
+    SB: np.ndarray,
+    desc_cols: list[str],
     ridge: float = 1e-8,
 ) -> tuple[pd.Series, float]:
     muA = np.asarray(muA, dtype=float)
@@ -130,12 +103,12 @@ def hlda_from_moments(
 
 
 def complete_weights(
-    desc_cols: Sequence[str],
-    kept_cols: Sequence[str],
+    desc_cols: list[str],
+    kept_cols: list[str],
     weights_kept: pd.Series,
-    covA: ArrayLike,
-    covB: ArrayLike,
-    keep_idx: Sequence[int],
+    covA: np.ndarray,
+    covB: np.ndarray,
+    keep_idx: list[int],
 ) -> dict[str, float]:
     """
     Extend weights to dropped descriptors by mapping each dropped descriptor
@@ -169,13 +142,13 @@ def complete_weights(
 
 
 def fit_hlda(
-    X_A: ArrayLike,
-    X_B: ArrayLike,
-    desc_cols: Sequence[str],
+    X_A: DescriptorMatrix,
+    X_B: DescriptorMatrix,
+    desc_cols: list[str],
     prune_threshold: float | None = None,
     include_pruned_weights: bool = False,
     ridge: float = 1e-8,
-) -> HLDAResult:
+) -> tuple[pd.Series, float] | tuple[pd.Series, float, dict[str, float]]:
     """
     Fit HLDA from descriptor matrices for two states.
 
@@ -184,7 +157,7 @@ def fit_hlda(
     X_A, X_B
         Samples x descriptors matrices for the two states.
     desc_cols
-        Descriptor names in column order.
+        Descriptor names in column order as a plain Python list.
     prune_threshold
         Optional Spearman correlation threshold for descriptor pruning.
     include_pruned_weights
@@ -193,8 +166,8 @@ def fit_hlda(
     ridge
         Diagonal covariance regularization added before matrix inversion.
     """
-    XA = _as_2d_array(X_A, "X_A")
-    XB = _as_2d_array(X_B, "X_B")
+    XA = np.asarray(X_A, dtype=float)
+    XB = np.asarray(X_B, dtype=float)
     names = _validate_descriptor_names(desc_cols, XA.shape[1])
     if XB.shape[1] != XA.shape[1]:
         raise ValueError("X_A and X_B must have the same number of features")
@@ -206,8 +179,8 @@ def fit_hlda(
 
     muA = XA[:, keep_idx].mean(axis=0)
     muB = XB[:, keep_idx].mean(axis=0)
-    covA = _covariance(XA[:, keep_idx])
-    covB = _covariance(XB[:, keep_idx])
+    covA = np.atleast_2d(np.cov(XA[:, keep_idx], rowvar=False, ddof=1)).astype(float)
+    covB = np.atleast_2d(np.cov(XB[:, keep_idx], rowvar=False, ddof=1)).astype(float)
     weights, eigenvalue = hlda_from_moments(muA, covA, muB, covB, kept_cols, ridge=ridge)
 
     full_weights = None
@@ -216,15 +189,12 @@ def fit_hlda(
             desc_cols=names,
             kept_cols=kept_cols,
             weights_kept=weights,
-            covA=_covariance(XA),
-            covB=_covariance(XB),
+            covA=np.atleast_2d(np.cov(XA, rowvar=False, ddof=1)).astype(float),
+            covB=np.atleast_2d(np.cov(XB, rowvar=False, ddof=1)).astype(float),
             keep_idx=keep_idx,
         )
 
-    return HLDAResult(
-        weights=weights,
-        eigenvalue=eigenvalue,
-        kept_descriptors=kept_cols,
-        kept_indices=keep_idx,
-        full_weights=full_weights,
-    )
+    if full_weights is not None:
+        return weights, eigenvalue, full_weights
+
+    return weights, eigenvalue
