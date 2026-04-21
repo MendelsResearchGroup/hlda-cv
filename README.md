@@ -2,10 +2,16 @@
 
 Harmonic Linear Discriminant Analysis utilities.
 
-Input data:
-- `X_A`: `list[list[float]]` with one descriptor row per sample in state A
-- `X_B`: `list[list[float]]` with one descriptor row per sample in state B
-- `desc_cols`: `list[str]` with descriptor names in column order
+Inputs:
+- `X_A, X_B`: Trajectory of descriptors for state A and B
+- `desc_cols`: descriptor names
+- `prune_threshold`: optional pruning threshold between `0` and `1`
+- `correlation_method`: optional pruning correlation, `"spearman"` or `"pearson"`
+
+Outputs:
+- `weights`: HLDA eigenvector weights
+- `eigenvalue`: HLDA eigenvalue
+- `full_weights`: optional weights for all descriptors when pruning is enabled
 
 ## Install
 
@@ -23,6 +29,7 @@ weights, eigenvalue, full_weights = fit_hlda(
     X_B=state_b_descriptors,
     desc_cols=descriptor_names,
     prune_threshold=0.93,
+    correlation_method="spearman",
     include_pruned_weights=True,
 )
 
@@ -33,6 +40,10 @@ print(full_weights)
 
 For workflows that already compute state means and covariance matrices, use
 `hlda_from_moments(...)` directly.
+
+Pruning uses Spearman correlation by default. Pearson correlation is also
+supported by setting `correlation_method="pearson"`. When pruning is enabled,
+`prune_threshold` must be between `0` and `1`.
 
 ## Example
 
@@ -54,4 +65,5 @@ PYTHONPATH=src pytest tests
 ```
 
 The test suite checks that HLDA prefers the obvious separating direction on a
-tiny toy system and that descriptor pruning removes redundant variables.
+tiny toy system, that descriptor pruning removes redundant variables, and that
+pruning validates the threshold range.

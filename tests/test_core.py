@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
+import pytest
+
 from hlda_cv import fit_hlda, prune
 
 
@@ -52,3 +54,37 @@ def test_prune_drops_redundant_descriptor() -> None:
     assert len(kept_cols) == 2
     assert len(keep_idx) == 2
     assert sum(col in {"x", "x_copy"} for col in kept_cols) == 1
+
+
+def test_prune_accepts_pearson_correlation() -> None:
+    """Assert that pruning can use Pearson correlation instead of Spearman."""
+    x_a = [
+        [0.0, 0.0, 1.0],
+        [1.0, 1.0, 1.1],
+        [2.0, 2.0, 0.9],
+        [3.0, 3.0, 1.0],
+    ]
+    x_b = [
+        [4.0, 4.0, 1.0],
+        [5.0, 5.0, 1.1],
+        [6.0, 6.0, 0.9],
+        [7.0, 7.0, 1.0],
+    ]
+
+    kept_cols, keep_idx = prune(
+        x_a,
+        x_b,
+        ["x", "x_copy", "noise"],
+        threshold=0.95,
+        correlation_method="pearson",
+    )
+
+    assert "noise" in kept_cols
+    assert len(kept_cols) == 2
+    assert len(keep_idx) == 2
+
+
+def test_prune_rejects_invalid_threshold() -> None:
+    """Assert that pruning rejects thresholds outside the valid [0, 1] range."""
+    with pytest.raises(ValueError, match="prune_threshold"):
+        prune([[0.0], [1.0]], [[2.0], [3.0]], ["x"], threshold=1.5)

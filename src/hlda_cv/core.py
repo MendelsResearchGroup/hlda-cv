@@ -8,6 +8,7 @@ from scipy.stats import spearmanr
 
 
 DescriptorMatrix: TypeAlias = list[list[float]] | np.ndarray
+CorrelationMethod: TypeAlias = str
 
 
 def _validate_descriptor_names(desc_cols: list[str], n_features: int) -> list[str]:
@@ -27,6 +28,20 @@ def _regularize_covariance(cov: np.ndarray, ridge: float) -> np.ndarray:
     return cov + ridge * np.eye(cov.shape[0], dtype=float)
 
 
+def _validate_prune_threshold(threshold: float) -> float:
+    threshold = float(threshold)
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("prune_threshold must be between 0 and 1")
+    return threshold
+
+
+def _validate_correlation_method(method: CorrelationMethod) -> str:
+    method = method.lower()
+    if method not in {"spearman", "pearson"}:
+        raise ValueError("correlation_method must be 'spearman' or 'pearson'")
+    return method
+
+
 def _spearman_abs_corr(X: np.ndarray) -> np.ndarray:
     if X.size == 0 or X.shape[0] < 2:
         return np.zeros((X.shape[1], X.shape[1]), dtype=float)
@@ -37,11 +52,21 @@ def _spearman_abs_corr(X: np.ndarray) -> np.ndarray:
     return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+def _pearson_abs_corr(X: np.ndarray) -> np.ndarray:
+    if X.size == 0 or X.shape[0] < 2:
+        return np.zeros((X.shape[1], X.shape[1]), dtype=float)
+    corr = np.corrcoef(X, rowvar=False)
+    corr = np.atleast_2d(corr)
+    corr = np.abs(corr)
+    return np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+
+
 def prune(
     X_A: DescriptorMatrix,
     X_B: DescriptorMatrix,
     desc_cols: list[str],
     threshold: float,
+    correlation_method: CorrelationMethod = "spearman",
 ) -> tuple[list[str], list[int]]:
     """
     Drop highly correlated descriptors using Spearman rank correlation computed
@@ -49,12 +74,18 @@ def prune(
     """
     XA = np.asarray(X_A, dtype=float)
     XB = np.asarray(X_B, dtype=float)
+    threshold = _validate_prune_threshold(threshold)
+    correlation_method = _validate_correlation_method(correlation_method)
     names = _validate_descriptor_names(desc_cols, XA.shape[1])
     if XB.shape[1] != XA.shape[1]:
         raise ValueError("X_A and X_B must have the same number of features")
 
-    corrA = _spearman_abs_corr(XA)
-    corrB = _spearman_abs_corr(XB)
+    if correlation_method == "spearman":
+        corrA = _spearman_abs_corr(XA)
+        corrB = _spearman_abs_corr(XB)
+    else:
+        corrA = _pearson_abs_corr(XA)
+        corrB = _pearson_abs_corr(XB)
     corr = np.maximum(corrA, corrB)
     lower = np.tril(corr, k=-1)
 
@@ -146,6 +177,7 @@ def fit_hlda(
     X_B: DescriptorMatrix,
     desc_cols: list[str],
     prune_threshold: float | None = None,
+    correlation_method: CorrelationMethod = "spearman",
     include_pruned_weights: bool = False,
     ridge: float = 1e-8,
 ) -> tuple[pd.Series, float] | tuple[pd.Series, float, dict[str, float]]:
@@ -159,7 +191,10 @@ def fit_hlda(
     desc_cols
         Descriptor names in column order as a plain Python list.
     prune_threshold
-        Optional Spearman correlation threshold for descriptor pruning.
+        Optional correlation threshold for descriptor pruning.
+    correlation_method
+        Correlation used for pruning. Supported values are `"spearman"` and
+        `"pearson"`. Default is `"spearman"`.
     include_pruned_weights
         When True and pruning is enabled, map dropped descriptors back onto the
         retained descriptor weights.
@@ -175,7 +210,13 @@ def fit_hlda(
     kept_cols = names
     keep_idx = list(range(len(names)))
     if prune_threshold is not None:
-        kept_cols, keep_idx = prune(XA, XB, names, threshold=prune_threshold)
+        kept_cols, keep_idx = prune(
+            XA,
+            XB,
+            names,
+            threshold=prune_threshold,
+            correlation_method=correlation_method,
+        )
 
     muA = XA[:, keep_idx].mean(axis=0)
     muB = XB[:, keep_idx].mean(axis=0)
