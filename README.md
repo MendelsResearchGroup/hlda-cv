@@ -2,7 +2,7 @@
 
 Harmonic Linear Discriminant Analysis utilities.
 
-Input data is intentionally simple:
+Input data:
 - `X_A`: `list[list[float]]` with one descriptor row per sample in state A
 - `X_B`: `list[list[float]]` with one descriptor row per sample in state B
 - `desc_cols`: `list[str]` with descriptor names in column order
@@ -10,7 +10,7 @@ Input data is intentionally simple:
 ## Install
 
 ```bash
-pip install "hlda-cv @ git+https://github.com/<owner>/hlda-cv.git"
+pip install "hlda-cv @ git+https://github.com/MendelsResearchGroup/hlda-cv.git"
 ```
 
 ## Usage

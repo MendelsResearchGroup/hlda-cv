@@ -6,6 +6,7 @@ from hlda_cv import fit_hlda, prune
 
 
 def test_fit_hlda_prefers_separating_axis() -> None:
+    """Assert that HLDA gives the largest weight to the clearly separating axis."""
     x_a = [
         [0.0, 0.0, 1.0],
         [0.1, 0.1, 1.1],
@@ -27,6 +28,7 @@ def test_fit_hlda_prefers_separating_axis() -> None:
 
 
 def test_prune_drops_redundant_descriptor() -> None:
+    """Assert that pruning removes one of two nearly identical descriptors."""
     x_a = np.array(
         [
             [0.0, 0.0, 0.0],
