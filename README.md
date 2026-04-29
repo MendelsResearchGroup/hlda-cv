@@ -13,24 +13,48 @@ pip install "hlda-cv @ git+https://github.com/MendelsResearchGroup/hlda-cv.git"
 `fit_hlda(...)` computes an HLDA collective variable from descriptor samples for
 two states.
 
-Parameters:
+Required inputs:
 
-- `X_A`: sample-by-descriptor matrix for state A. Accepts a nested Python list or
-  a NumPy array with shape `(n_samples_A, n_descriptors)`.
-- `X_B`: sample-by-descriptor matrix for state B. Accepts a nested Python list or
-  a NumPy array with shape `(n_samples_B, n_descriptors)`. It must have the same
-  number of descriptor columns as `X_A`.
-- `desc_cols`: descriptor names in the same column order as `X_A` and `X_B`.
-  The length must equal the number of descriptor columns.
-- `prune_threshold`: optional float between `0` and `1`. When set, descriptors
-  with absolute correlation greater than this threshold are pruned before HLDA is
-  fitted. Use `None` to disable pruning.
-- `correlation_method`: correlation method used only when `prune_threshold` is
-  set. Supported values are `"spearman"` and `"pearson"`. Defaults to
-  `"spearman"`.
-- `include_pruned_weights`: when `False`, return weights only for descriptors
-  retained after pruning. When `True` and pruning is enabled, also return a
-  dictionary that maps every original descriptor name to a weight.
+- `X_A`: descriptor values for state A, with shape
+  `(number of samples, number of descriptors)`.
+- `X_B`: descriptor values for state B, with shape
+  `(number of samples, number of descriptors)`. It must have the same number of
+  descriptors as `X_A`.
+- `desc_cols`: descriptor names, in the same order as the columns in `X_A` and
+  `X_B`.
+
+Minimal example:
+
+```python
+from hlda_cv import fit_hlda
+
+state_a_descriptors = [
+    [0.0, 1.0],
+    [0.1, 1.1],
+    [0.2, 0.9],
+]
+state_b_descriptors = [
+    [1.0, 2.0],
+    [1.1, 2.1],
+    [0.9, 1.9],
+]
+descriptor_names = ["d1", "d2"]
+
+weights, eigenvalue = fit_hlda(
+    X_A=state_a_descriptors,
+    X_B=state_b_descriptors,
+    desc_cols=descriptor_names,
+)
+```
+
+Optional inputs:
+
+- `prune_threshold`: correlation threshold for pruning similar descriptors. Must
+  be between `0` and `1`. Leave unset to disable pruning.
+- `correlation_method`: pruning method, either `"spearman"` or `"pearson"`.
+  Defaults to `"spearman"`.
+- `include_pruned_weights`: when `True`, also return weights for descriptors
+  removed by pruning. Defaults to `False`.
 - `ridge`: non-negative diagonal regularization added to each covariance matrix
   before inversion. Defaults to `1e-8`.
 
@@ -40,8 +64,13 @@ Returns:
   name. If pruning is enabled, this contains only retained descriptors.
 - `eigenvalue`: float eigenvalue for the selected HLDA direction.
 - `full_weights`: returned only when `include_pruned_weights=True` and
-  `prune_threshold` is set. This is a dictionary containing weights for all
-  original descriptors, including descriptors removed during pruning.
+  `prune_threshold` is set. This contains weights for all original descriptors.
+
+## Chignolin peptide example
+
+The repository includes a compact real peptide example for chignolin and two
+mutants. The data files are available to download in `examples/data/`. Each
+pickle contains distance descriptors for folded and unfolded states.
 
 ```python
 import pickle
@@ -83,17 +112,7 @@ full descriptor count = 72
 For workflows that already compute state means and covariance matrices, use
 `hlda_from_moments(...)` directly.
 
-Pruning uses Spearman correlation by default. Pearson correlation is also
-supported by setting `correlation_method="pearson"`. When pruning is enabled,
-`prune_threshold` must be between `0` and `1`.
-
-## Example
-
-The repository includes a compact example dataset for chignolin and two mutants.
-The data files are available to download in `examples/data/`. Each pickle
-contains only distance descriptors for folded and unfolded states.
-
-Run the example with:
+You can also run the full peptide example script:
 
 ```bash
 PYTHONPATH=src python examples/run_peptide_example.py
